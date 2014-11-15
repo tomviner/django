@@ -161,6 +161,13 @@ class BookWithLongName(models.Model):
         apps = new_apps
 
 
+class BookWithIndex(models.Model):
+    title = models.CharField(max_length=100, db_index=True)
+
+    class Meta:
+        apps = new_apps
+
+
 # Based on tests/reserved_names/models.py
 @python_2_unicode_compatible
 class Thing(models.Model):
