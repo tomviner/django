@@ -10,7 +10,7 @@ from django.db.transaction import atomic
 from .models import (Author, AuthorWithDefaultHeight, AuthorWithM2M, Book, BookWithLongName,
     BookWithSlug, BookWithM2M, Tag, TagIndexed, TagM2MTest, TagUniqueRename,
     UniqueTest, Thing, TagThrough, BookWithM2MThrough, AuthorTag, AuthorWithM2MThrough,
-    AuthorWithEvenLongerName, BookWeak)
+    AuthorWithEvenLongerName, BookWeak, BookWithIndex)
 
 
 class SchemaTests(TransactionTestCase):
@@ -1160,3 +1160,33 @@ class SchemaTests(TransactionTestCase):
                 }
             )
             editor.alter_field(model, get_field(Author, field_class=ForeignKey), field)
+
+    def test_colliding_index_names(self):
+        """
+        #23577 - Index names clash after their field is renamed then
+        another field created with the original's name.
+        Except on sqlite where a field rename requires a new table.
+        """
+
+        # Create the table, which will create an index for the title field
+        with connection.schema_editor() as editor:
+            editor.create_model(BookWithIndex)
+        # Rename the title field
+        original_field = BookWithIndex._meta.get_field_by_name("title")[0]
+        new_field = CharField(max_length=100, db_index=True)
+        new_field.set_attributes_from_name("title_new")
+        with connection.schema_editor() as editor:
+            editor.alter_field(
+                BookWithIndex,
+                original_field,
+                new_field,
+                strict=True,
+            )
+        # Create another field, like the original
+        like_original_field = CharField(max_length=100, db_index=True)
+        like_original_field.set_attributes_from_name("title")
+        with connection.schema_editor() as editor:
+            editor.add_field(
+                BookWithIndex,
+                like_original_field
+            )
