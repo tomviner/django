@@ -70,8 +70,8 @@ class SpatialiteSchemaEditor(DatabaseSchemaEditor):
             }
         )
 
-    def create_model(self, model):
-        super(SpatialiteSchemaEditor, self).create_model(model)
+    def create_model(self, model, extra_index_suffix=''):
+        super(SpatialiteSchemaEditor, self).create_model(model, extra_index_suffix=extra_index_suffix)
         # Create geometry columns
         for sql in self.geometry_sql:
             self.execute(sql)
@@ -96,7 +96,7 @@ class SpatialiteSchemaEditor(DatabaseSchemaEditor):
                 pass
         super(SpatialiteSchemaEditor, self).delete_model(model, **kwargs)
 
-    def add_field(self, model, field):
+    def add_field(self, model, field, extra_index_suffix=''):
         from django.contrib.gis.db.models.fields import GeometryField
         if isinstance(field, GeometryField):
             # Populate self.geometry_sql
@@ -105,7 +105,7 @@ class SpatialiteSchemaEditor(DatabaseSchemaEditor):
                 self.execute(sql)
             self.geometry_sql = []
         else:
-            super(SpatialiteSchemaEditor, self).add_field(model, field)
+            super(SpatialiteSchemaEditor, self).add_field(model, field, extra_index_suffix=extra_index_suffix):
 
     def remove_field(self, model, field):
         from django.contrib.gis.db.models.fields import GeometryField

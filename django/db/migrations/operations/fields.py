@@ -45,6 +45,7 @@ class AddField(Operation):
             schema_editor.add_field(
                 from_model,
                 field,
+                extra_index_suffix=self.extra_index_suffix,
             )
             if not self.preserve_default:
                 field.default = NOT_PROVIDED

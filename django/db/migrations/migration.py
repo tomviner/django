@@ -85,7 +85,9 @@ class Migration(object):
         Returns the resulting project state for efficient re-use by following
         Migrations.
         """
+        extra_index_suffix = str(self)
         for operation in self.operations:
+            operation.set_extra_index_suffix(extra_index_suffix)
             # If this operation cannot be represented as SQL, place a comment
             # there instead
             if collect_sql and not operation.reduces_to_sql:

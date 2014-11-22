@@ -77,8 +77,8 @@ class PostGISSchemaEditor(DatabaseSchemaEditor):
             )
         return column_sql
 
-    def create_model(self, model):
-        super(PostGISSchemaEditor, self).create_model(model)
+    def create_model(self, model, extra_index_suffix=''):
+        super(PostGISSchemaEditor, self).create_model(model, extra_index_suffix=extra_index_suffix)
         # Create geometry columns
         for sql in self.geometry_sql:
             self.execute(sql)
@@ -90,8 +90,8 @@ class PostGISSchemaEditor(DatabaseSchemaEditor):
             "table": self.geo_quote_name(model._meta.db_table),
         })
 
-    def add_field(self, model, field):
-        super(PostGISSchemaEditor, self).add_field(model, field)
+    def add_field(self, model, field, extra_index_suffix=''):
+        super(PostGISSchemaEditor, self).add_field(model, field, extra_index_suffix=extra_index_suffix)
         # Create geometry columns
         for sql in self.geometry_sql:
             self.execute(sql)

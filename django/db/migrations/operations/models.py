@@ -45,7 +45,7 @@ class CreateModel(Operation):
         apps = to_state.render()
         model = apps.get_model(app_label, self.name)
         if self.allowed_to_migrate(schema_editor.connection.alias, model):
-            schema_editor.create_model(model)
+            schema_editor.create_model(model, extra_index_suffix=self.extra_index_suffix)
 
     def database_backwards(self, app_label, schema_editor, from_state, to_state):
         apps = from_state.render()
@@ -102,7 +102,7 @@ class DeleteModel(Operation):
         apps = to_state.render()
         model = apps.get_model(app_label, self.name)
         if self.allowed_to_migrate(schema_editor.connection.alias, model):
-            schema_editor.create_model(model)
+            schema_editor.create_model(model, extra_index_suffix=self.extra_index_suffix)
 
     def references_model(self, name, app_label=None):
         return name.lower() == self.name.lower()
@@ -377,6 +377,7 @@ class AlterOrderWithRespectTo(Operation):
                 schema_editor.add_field(
                     from_model,
                     field,
+                    extra_index_suffix=self.extra_index_suffix,
                 )
 
     def database_backwards(self, app_label, schema_editor, from_state, to_state):

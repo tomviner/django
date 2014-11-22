@@ -155,7 +155,7 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
                 "table": self.quote_name(model._meta.db_table),
             })
 
-    def add_field(self, model, field):
+    def add_field(self, model, field, extra_index_suffix=''):
         """
         Creates a field on a model.
         Usually involves adding a column, but may involve adding a
@@ -185,7 +185,7 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
             self._remake_table(model, delete_fields=[field])
 
     def _alter_field(self, model, old_field, new_field, old_type, new_type,
-                     old_db_params, new_db_params, strict=False):
+                     old_db_params, new_db_params, strict=False, extra_index_suffix=''):
         """Actually perform a "physical" (non-ManyToMany) field update."""
         # Alter by remaking table
         self._remake_table(model, alter_fields=[(old_field, new_field)])

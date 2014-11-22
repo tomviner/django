@@ -1170,7 +1170,7 @@ class SchemaTests(TransactionTestCase):
 
         # Create the table, which will create an index for the title field
         with connection.schema_editor() as editor:
-            editor.create_model(BookWithIndex)
+            editor.create_model(BookWithIndex, extra_index_suffix='schema_test.0001')
 
         # Rename the title field
         original_field = BookWithIndex._meta.get_field_by_name("title")[0]
@@ -1182,6 +1182,7 @@ class SchemaTests(TransactionTestCase):
                 original_field,
                 new_field,
                 strict=True,
+                extra_index_suffix='schema_test.0002'
             )
 
         # Create another field, like the original
@@ -1190,7 +1191,8 @@ class SchemaTests(TransactionTestCase):
         with connection.schema_editor() as editor:
             editor.add_field(
                 BookWithIndex,
-                like_original_field
+                like_original_field,
+                extra_index_suffix='schema_test.0003'
             )
 
     def test_colliding_fkey_names(self):
@@ -1200,9 +1202,9 @@ class SchemaTests(TransactionTestCase):
         Except on sqlite where a field rename requires a new table.
         """
         with connection.schema_editor() as editor:
-            editor.create_model(Author)
+            editor.create_model(Author, extra_index_suffix='schema_test.0001')
             # Create the table, which will create the foreign key constraint
-            editor.create_model(BookWithFKey)
+            editor.create_model(BookWithFKey, extra_index_suffix='schema_test.0001')
 
         # Rename the author field
         original_field = BookWithFKey._meta.get_field_by_name("author")[0]
@@ -1214,6 +1216,7 @@ class SchemaTests(TransactionTestCase):
                 original_field,
                 new_field,
                 strict=True,
+                extra_index_suffix='schema_test.0002'
             )
 
         # Create another field, like the original
@@ -1224,4 +1227,5 @@ class SchemaTests(TransactionTestCase):
             editor.add_field(
                 BookWithFKey,
                 like_original_field,
+                extra_index_suffix='schema_test.0003'
             )

@@ -200,7 +200,7 @@ class BaseDatabaseSchemaEditor(object):
 
     # Actions
 
-    def create_model(self, model):
+    def create_model(self, model, extra_index_suffix=''):
         """
         Takes a model and creates a table for it in the database.
         Will also create any accompanying indexes or unique constraints.
@@ -224,13 +224,15 @@ class BaseDatabaseSchemaEditor(object):
             params.extend(extra_params)
             # Indexes
             if field.db_index and not field.unique:
-                self.deferred_sql.append(self._create_index_sql(model, [field], suffix=""))
+                self.deferred_sql.append(self._create_index_sql(model, [field], extra_index_suffix=extra_index_suffix, suffix=""))
             # FK
             if field.rel and field.db_constraint:
                 to_table = field.rel.to._meta.db_table
                 to_column = field.rel.to._meta.get_field(field.rel.field_name).column
                 if self.connection.features.supports_foreign_keys:
-                    self.deferred_sql.append(self._create_fk_sql(model, field, "_fk_%(to_table)s_%(to_column)s"))
+                    self.deferred_sql.append(
+                        self._create_fk_sql(model, field, extra_index_suffix=extra_index_suffix, suffix="_fk_%(to_table)s_%(to_column)s")
+                    )
                 elif self.sql_create_inline_fk:
                     definition += " " + self.sql_create_inline_fk % {
                         "to_table": self.quote_name(to_table),
@@ -261,7 +263,7 @@ class BaseDatabaseSchemaEditor(object):
         # Add any index_togethers
         for field_names in model._meta.index_together:
             fields = [model._meta.get_field_by_name(field)[0] for field in field_names]
-            self.execute(self._create_index_sql(model, fields, suffix="_idx"))
+            self.execute(self._create_index_sql(model, fields, extra_index_suffix=extra_index_suffix, suffix="_idx"))
         # Make M2M tables
         for field in model._meta.local_many_to_many:
             if field.rel.through._meta.auto_created:
@@ -350,7 +352,7 @@ class BaseDatabaseSchemaEditor(object):
             "new_tablespace": self.quote_name(new_db_tablespace),
         })
 
-    def add_field(self, model, field):
+    def add_field(self, model, field, extra_index_suffix=''):
         """
         Creates a field on a model.
         Usually involves adding a column, but may involve adding a
@@ -387,10 +389,10 @@ class BaseDatabaseSchemaEditor(object):
             self.execute(sql)
         # Add an index, if required
         if field.db_index and not field.unique:
-            self.deferred_sql.append(self._create_index_sql(model, [field]))
+            self.deferred_sql.append(self._create_index_sql(model, [field], extra_index_suffix=extra_index_suffix))
         # Add any FK constraints later
         if field.rel and self.connection.features.supports_foreign_keys and field.db_constraint:
-            self.deferred_sql.append(self._create_fk_sql(model, field, "_fk_%(to_table)s_%(to_column)s"))
+            self.deferred_sql.append(self._create_fk_sql(model, field, extra_index_suffix=extra_index_suffix, suffix="_fk_%(to_table)s_%(to_column)s"))
         # Reset connection if required
         if self.connection.features.connection_persists_old_columns:
             self.connection.close()
@@ -421,7 +423,7 @@ class BaseDatabaseSchemaEditor(object):
         if self.connection.features.connection_persists_old_columns:
             self.connection.close()
 
-    def alter_field(self, model, old_field, new_field, strict=False):
+    def alter_field(self, model, old_field, new_field, strict=False, extra_index_suffix=''):
         """
         Allows a field's type, uniqueness, nullability, default, column,
         constraints etc. to be modified.
@@ -459,10 +461,10 @@ class BaseDatabaseSchemaEditor(object):
             )
 
         self._alter_field(model, old_field, new_field, old_type, new_type,
-                          old_db_params, new_db_params, strict)
+                          old_db_params, new_db_params, strict, extra_index_suffix=extra_index_suffix)
 
     def _alter_field(self, model, old_field, new_field, old_type, new_type,
-                     old_db_params, new_db_params, strict=False):
+                     old_db_params, new_db_params, strict=False, extra_index_suffix=''):
         """Actually perform a "physical" (non-ManyToMany) field update."""
 
         # Has unique been removed?
@@ -693,17 +695,21 @@ class BaseDatabaseSchemaEditor(object):
         if new_field.rel and \
            (fks_dropped or (old_field.rel and not old_field.db_constraint)) and \
            new_field.db_constraint:
-            self.execute(self._create_fk_sql(model, new_field, "_fk_%(to_table)s_%(to_column)s"))
+            self.execute(self._create_fk_sql(model, new_field, extra_index_suffix=extra_index_suffix, suffix="_fk_%(to_table)s_%(to_column)s"))
         # Rebuild FKs that pointed to us if we previously had to drop them
         if old_field.primary_key and new_field.primary_key and old_type != new_type:
             for rel in new_field.model._meta.get_all_related_objects():
-                self.execute(self._create_fk_sql(rel.model, rel.field, "_fk"))
+                self.execute(self._create_fk_sql(rel.model, rel.field, extra_index_suffix=extra_index_suffix, suffix="_fk"))
         # Does it have check constraints we need to add?
         if old_db_params['check'] != new_db_params['check'] and new_db_params['check']:
             self.execute(
                 self.sql_create_check % {
                     "table": self.quote_name(model._meta.db_table),
-                    "name": self.quote_name(self._create_index_name(model, [new_field.column], suffix="_check")),
+                    "name": self.quote_name(
+                        self._create_index_name(
+                            model, [new_field.column], extra_index_suffix=extra_index_suffix, suffix="_check"
+                        )
+                    ),
                     "column": self.quote_name(new_field.column),
                     "check": new_db_params['check'],
                 }
@@ -766,19 +772,23 @@ class BaseDatabaseSchemaEditor(object):
             new_field.rel.through._meta.get_field_by_name(new_field.m2m_field_name())[0],
         )
 
-    def _create_index_name(self, model, column_names, suffix=""):
+    def _create_index_name(self, model, column_names, extra_index_suffix='', suffix=""):
         """
         Generates a unique name for an index/unique constraint.
         """
         # If there is just one column in the index, use a default algorithm from Django
         if len(column_names) == 1 and not suffix:
             return truncate_name(
-                '%s_%s' % (model._meta.db_table, BaseDatabaseCreation._digest(column_names[0])),
+                '%s_%s_%s' % (
+                    model._meta.db_table,
+                    BaseDatabaseCreation._digest(column_names[0]),
+                    extra_index_suffix
+                ),
                 self.connection.ops.max_name_length()
             )
         # Else generate the name for the index using a different algorithm
         table_name = model._meta.db_table.replace('"', '').replace('.', '_')
-        index_unique_name = '_%x' % abs(hash((table_name, ','.join(column_names))))
+        index_unique_name = '_%x' % abs(hash((table_name, ','.join(column_names), extra_index_suffix)))
         max_length = self.connection.ops.max_name_length() or 200
         # If the index name is too long, truncate it
         index_name = ('%s_%s%s%s' % (
@@ -798,16 +808,18 @@ class BaseDatabaseSchemaEditor(object):
             index_name = "D%s" % index_name[:-1]
         return index_name
 
-    def _create_index_sql(self, model, fields, suffix=""):
+    def _create_index_sql(self, model, fields, extra_index_suffix='', suffix=""):
         columns = [field.column for field in fields]
         return self.sql_create_index % {
             "table": self.quote_name(model._meta.db_table),
-            "name": self.quote_name(self._create_index_name(model, columns, suffix=suffix)),
+            "name": self.quote_name(
+                self._create_index_name(model, columns, extra_index_suffix=extra_index_suffix, suffix=suffix),
+            ),
             "columns": ", ".join(self.quote_name(column) for column in columns),
             "extra": "",
         }
 
-    def _create_fk_sql(self, model, field, suffix):
+    def _create_fk_sql(self, model, field, extra_index_suffix, suffix):
         from_table = model._meta.db_table
         from_column = field.column
         to_table = field.related_field.model._meta.db_table
@@ -819,16 +831,22 @@ class BaseDatabaseSchemaEditor(object):
 
         return self.sql_create_fk % {
             "table": self.quote_name(from_table),
-            "name": self.quote_name(self._create_index_name(model, [from_column], suffix=suffix)),
+            "name": self.quote_name(
+                self._create_index_name(model, [from_column], extra_index_suffix=extra_index_suffix, suffix=suffix)
+            ),
             "column": self.quote_name(from_column),
             "to_table": self.quote_name(to_table),
             "to_column": self.quote_name(to_column),
         }
 
-    def _create_unique_sql(self, model, columns):
+    def _create_unique_sql(self, model, columns, extra_index_suffix=''):
         return self.sql_create_unique % {
             "table": self.quote_name(model._meta.db_table),
-            "name": self.quote_name(self._create_index_name(model, columns, suffix="_uniq")),
+            "name": self.quote_name(
+                self._create_index_name(
+                    model, columns, extra_index_suffix=extra_index_suffix, suffix="_uniq"
+                )
+            ),
             "columns": ", ".join(self.quote_name(column) for column in columns),
         }
 

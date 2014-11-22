@@ -29,6 +29,9 @@ class Operation(object):
     # DDL transaction support (i.e., does it have no DDL, like RunPython)
     atomic = False
 
+    # Required to avoid index name collisions
+    extra_index_suffix = ''
+
     serialization_expand_args = []
 
     def __new__(cls, *args, **kwargs):
@@ -109,6 +112,12 @@ class Operation(object):
             model._meta.managed and
             router.allow_migrate(connection_alias, model)
         )
+
+    def set_extra_index_suffix(self, name):
+        """
+        Required to avoid index name collisions
+        """
+        self.extra_index_suffix = name
 
     def __repr__(self):
         return "<%s %s%s>" % (

@@ -41,8 +41,8 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
         """
         return field.db_type(self.connection) in {'longtext', 'longblob'}
 
-    def add_field(self, model, field):
-        super(DatabaseSchemaEditor, self).add_field(model, field)
+    def add_field(self, model, field, extra_index_suffix=''):
+        super(DatabaseSchemaEditor, self).add_field(model, field, extra_index_suffix=extra_index_suffix)
 
         # Simulate the effect of a one-off default.
         if self.skip_default(field) and field.default not in {None, NOT_PROVIDED}:

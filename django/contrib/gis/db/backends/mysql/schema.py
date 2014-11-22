@@ -37,12 +37,12 @@ class MySQLGISSchemaEditor(DatabaseSchemaEditor):
             )
         return column_sql
 
-    def create_model(self, model):
-        super(MySQLGISSchemaEditor, self).create_model(model)
+    def create_model(self, model, extra_index_suffix=''):
+        super(MySQLGISSchemaEditor, self).create_model(model, extra_index_suffix=extra_index_suffix)
         self.create_spatial_indexes()
 
-    def add_field(self, model, field):
-        super(MySQLGISSchemaEditor, self).add_field(model, field)
+    def add_field(self, model, field, extra_index_suffix=''):
+        super(MySQLGISSchemaEditor, self).add_field(model, field, extra_index_suffix=extra_index_suffix)
         self.create_spatial_indexes()
 
     def remove_field(self, model, field):

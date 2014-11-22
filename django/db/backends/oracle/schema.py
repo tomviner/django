@@ -47,10 +47,10 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
             END;
         /""" % {'sq_name': self.connection.ops._get_sequence_name(model._meta.db_table)})
 
-    def alter_field(self, model, old_field, new_field, strict=False):
+    def alter_field(self, model, old_field, new_field, strict=False, extra_index_suffix=''):
         try:
             # Run superclass action
-            super(DatabaseSchemaEditor, self).alter_field(model, old_field, new_field, strict)
+            super(DatabaseSchemaEditor, self).alter_field(model, old_field, new_field, strict, extra_index_suffix=extra_index_suffix)
         except DatabaseError as e:
             description = str(e)
             # If we're changing to/from LOB fields, we need to do a

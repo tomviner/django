@@ -57,8 +57,8 @@ class OracleGISSchemaEditor(DatabaseSchemaEditor):
                 )
         return column_sql
 
-    def create_model(self, model):
-        super(OracleGISSchemaEditor, self).create_model(model)
+    def create_model(self, model, extra_index_suffix=''):
+        super(OracleGISSchemaEditor, self).create_model(model, extra_index_suffix=extra_index_suffix)
         self.run_geometry_sql()
 
     def delete_model(self, model):
@@ -67,8 +67,8 @@ class OracleGISSchemaEditor(DatabaseSchemaEditor):
             'table': self.geo_quote_name(model._meta.db_table),
         })
 
-    def add_field(self, model, field):
-        super(OracleGISSchemaEditor, self).add_field(model, field)
+    def add_field(self, model, field, extra_index_suffix=''):
+        super(OracleGISSchemaEditor, self).add_field(model, field, extra_index_suffix=extra_index_suffix)
         self.run_geometry_sql()
 
     def remove_field(self, model, field):
