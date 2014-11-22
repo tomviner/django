@@ -10,7 +10,7 @@ from django.db.transaction import atomic
 from .models import (Author, AuthorWithDefaultHeight, AuthorWithM2M, Book, BookWithLongName,
     BookWithSlug, BookWithM2M, Tag, TagIndexed, TagM2MTest, TagUniqueRename,
     UniqueTest, Thing, TagThrough, BookWithM2MThrough, AuthorTag, AuthorWithM2MThrough,
-    AuthorWithEvenLongerName, BookWeak, BookWithIndex)
+    AuthorWithEvenLongerName, BookWeak, BookWithIndex, BookWithFKey)
 
 
 class SchemaTests(TransactionTestCase):
@@ -28,7 +28,7 @@ class SchemaTests(TransactionTestCase):
         Author, AuthorWithM2M, Book, BookWithLongName, BookWithSlug,
         BookWithM2M, Tag, TagIndexed, TagM2MTest, TagUniqueRename, UniqueTest,
         Thing, TagThrough, BookWithM2MThrough, AuthorWithEvenLongerName,
-        BookWeak,
+        BookWeak, BookWithIndex, BookWithFKey
     ]
 
     # Utility functions
@@ -1171,6 +1171,7 @@ class SchemaTests(TransactionTestCase):
         # Create the table, which will create an index for the title field
         with connection.schema_editor() as editor:
             editor.create_model(BookWithIndex)
+
         # Rename the title field
         original_field = BookWithIndex._meta.get_field_by_name("title")[0]
         new_field = CharField(max_length=100, db_index=True)
@@ -1182,6 +1183,7 @@ class SchemaTests(TransactionTestCase):
                 new_field,
                 strict=True,
             )
+
         # Create another field, like the original
         like_original_field = CharField(max_length=100, db_index=True)
         like_original_field.set_attributes_from_name("title")
@@ -1189,4 +1191,37 @@ class SchemaTests(TransactionTestCase):
             editor.add_field(
                 BookWithIndex,
                 like_original_field
+            )
+
+    def test_colliding_fkey_names(self):
+        """
+        #23577 - fkey constraint names clash after their field is renamed then
+        another field created with the original's name.
+        Except on sqlite where a field rename requires a new table.
+        """
+        with connection.schema_editor() as editor:
+            editor.create_model(Author)
+            # Create the table, which will create the foreign key constraint
+            editor.create_model(BookWithFKey)
+
+        # Rename the author field
+        original_field = BookWithFKey._meta.get_field_by_name("author")[0]
+        new_field = ForeignKey(Author)
+        new_field.set_attributes_from_name("author_new")
+        with connection.schema_editor() as editor:
+            editor.alter_field(
+                BookWithFKey,
+                original_field,
+                new_field,
+                strict=True,
+            )
+
+        # Create another field, like the original
+        like_original_field = ForeignKey(Author)
+        like_original_field.set_attributes_from_name("author")
+
+        with connection.schema_editor() as editor:
+            editor.add_field(
+                BookWithFKey,
+                like_original_field,
             )
