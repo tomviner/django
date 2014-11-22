@@ -168,6 +168,13 @@ class BookWithIndex(models.Model):
         apps = new_apps
 
 
+class BookWithFKey(models.Model):
+    author = models.ForeignKey(Author)
+
+    class Meta:
+        apps = new_apps
+
+
 # Based on tests/reserved_names/models.py
 @python_2_unicode_compatible
 class Thing(models.Model):
