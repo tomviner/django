@@ -7,6 +7,7 @@ from django.db.transaction import atomic
 from django.utils.encoding import force_bytes
 from django.utils.log import getLogger
 from django.utils import six
+from django.utils.crypto import get_random_string
 
 logger = getLogger('django.db.backends.schema')
 
@@ -768,17 +769,23 @@ class BaseDatabaseSchemaEditor(object):
 
     def _create_index_name(self, model, column_names, suffix=""):
         """
-        Generates a unique name for an index/unique constraint.
+        Generates a unique name for an index/unique constraint,
+        including a random component to prevent collisions.
         """
+        random_string = get_random_string(5)
         # If there is just one column in the index, use a default algorithm from Django
         if len(column_names) == 1 and not suffix:
             return truncate_name(
-                '%s_%s' % (model._meta.db_table, BaseDatabaseCreation._digest(column_names[0])),
+                '%s_%s_%s' % (
+                    model._meta.db_table,
+                    BaseDatabaseCreation._digest(column_names[0]),
+                    random_string
+                ),
                 self.connection.ops.max_name_length()
             )
         # Else generate the name for the index using a different algorithm
         table_name = model._meta.db_table.replace('"', '').replace('.', '_')
-        index_unique_name = '_%x' % abs(hash((table_name, ','.join(column_names))))
+        index_unique_name = '_%x' % abs(hash((table_name, ','.join(column_names), random_string)))
         max_length = self.connection.ops.max_name_length() or 200
         # If the index name is too long, truncate it
         index_name = ('%s_%s%s%s' % (
