@@ -3,6 +3,7 @@ import sys
 import tempfile
 import threading
 import time
+from contextvars import ContextVar
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
@@ -418,6 +419,111 @@ class ASGITest(SimpleTestCase):
         # It so happens that there are enough remaining yield points in both
         # tasks that they both finish while the loop is running.
         await communicator.wait()
+
+    async def test_disconnect_preserves_processing_exception(self):
+        class ProcessingError(BaseException):
+            pass
+
+        errors = (
+            ValueError("processing cleanup failed"),
+            ProcessingError("processing cleanup failed"),
+            BaseExceptionGroup("processing errors", [ProcessingError()]),
+        )
+        for error in errors:
+            with self.subTest(error=error):
+                processing_started = asyncio.Event()
+
+                class TestASGIHandler(ASGIHandler):
+                    async def run_get_response(self, request):
+                        processing_started.set()
+                        try:
+                            await asyncio.Future()
+                        finally:
+                            raise error
+
+                application = TestASGIHandler()
+                scope = self.async_request_factory._base_scope(path="/")
+                communicator = ApplicationCommunicator(application, scope)
+                await communicator.send_input({"type": "http.request"})
+                await asyncio.wait_for(processing_started.wait(), timeout=1)
+                await communicator.send_input({"type": "http.disconnect"})
+                with self.assertRaises(type(error)) as raised:
+                    await communicator.wait()
+                if isinstance(error, BaseExceptionGroup):
+                    self.assertEqual(raised.exception.message, error.message)
+                    self.assertEqual(raised.exception.exceptions, error.exceptions)
+                else:
+                    self.assertIs(raised.exception, error)
+
+    async def test_processing_cancellation_finishes_handler(self):
+        for cancel_during in ("view", "send"):
+            with self.subTest(cancel_during=cancel_during):
+                listener_finished = asyncio.Event()
+
+                class TestASGIHandler(ASGIHandler):
+                    async def run_get_response(self, request):
+                        if cancel_during == "view":
+                            raise asyncio.CancelledError
+                        return HttpResponse("ok")
+
+                    async def send_response(self, response, send):
+                        raise asyncio.CancelledError
+
+                    async def listen_for_disconnect(self, receive):
+                        try:
+                            await asyncio.Future()
+                        finally:
+                            listener_finished.set()
+
+                application = TestASGIHandler()
+                scope = self.async_request_factory._base_scope(path="/")
+                communicator = ApplicationCommunicator(application, scope)
+                await communicator.send_input({"type": "http.request"})
+                try:
+                    done, _ = await asyncio.wait([communicator.future], timeout=1)
+                    self.assertIn(communicator.future, done)
+                    self.assertTrue(communicator.future.cancelled())
+                    self.assertTrue(listener_finished.is_set())
+                finally:
+                    communicator.stop(exceptions=False)
+
+    async def test_disconnect_preserves_cleanup_context(self):
+        request_context = ContextVar("request_context", default="unset")
+        view_started = asyncio.Event()
+        finished_contexts = []
+
+        def on_finished(**kwargs):
+            finished_contexts.append(request_context.get())
+
+        request_finished.connect(on_finished, weak=False)
+        self.addCleanup(request_finished.disconnect, on_finished)
+
+        async def view(request):
+            request_context.set("inside")
+            view_started.set()
+            await asyncio.Future()
+
+        class TestASGIRequest(ASGIRequest):
+            urlconf = (path("context/", view),)
+
+        class TestASGIHandler(ASGIHandler):
+            request_class = TestASGIRequest
+
+            async def handle(self, scope, receive, send):
+                token = request_context.set("outside")
+                try:
+                    await super().handle(scope, receive, send)
+                finally:
+                    request_context.reset(token)
+
+        application = TestASGIHandler()
+        scope = self.async_request_factory._base_scope(path="/context/")
+        communicator = ApplicationCommunicator(application, scope)
+        await communicator.send_input({"type": "http.request"})
+        await asyncio.wait_for(view_started.wait(), timeout=1)
+        await communicator.send_input({"type": "http.disconnect"})
+        await communicator.wait()
+        self.assertEqual(finished_contexts, ["outside"])
 
     async def test_disconnect_with_body(self):
         application = get_asgi_application()

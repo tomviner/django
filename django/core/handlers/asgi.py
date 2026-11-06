@@ -198,13 +198,25 @@ class ASGIHandler(base.BaseHandler):
                 pass
 
             response = None
+
+            async def process_request():
+                nonlocal response
+                response = await self.run_get_response(request)
+                await self.send_response(response, send)
+                raise RequestProcessed
+
             try:
                 try:
                     async with asyncio.TaskGroup() as tg:
                         tg.create_task(self.listen_for_disconnect(receive))
-                        response = await self.run_get_response(request)
-                        await self.send_response(response, send)
-                        raise RequestProcessed
+                        # Isolate context but propagate cancellation.
+                        try:
+                            await tg.create_task(process_request())
+                        except asyncio.CancelledError:
+                            raise
+                        except BaseException:
+                            # TaskGroup propagates child failures once.
+                            pass
                 except* (RequestProcessed, RequestAborted):
                     pass
             except BaseExceptionGroup as exception_group:
